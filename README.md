@@ -35,7 +35,7 @@ flowchart TB
     end
 
     web["web<br/>UI + API"]
-    temporal[("Temporal<br/>task queue: expense-approval")]
+    temporal[("Temporal<br/>task queue<br/>expense-approval")]
     worker["worker<br/>ExpenseApproval Workflow<br/>+ Activities"]
   end
 
