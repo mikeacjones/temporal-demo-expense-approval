@@ -13,11 +13,56 @@ It follows Temporal's [Approval pattern](https://docs.temporal.io/design-pattern
 ## How it works
 
 ```mermaid
-flowchart LR
-  B[Browser] -->|submit / decide| W[web: UI + API]
-  W -->|start, signal, read history| T[(Temporal)]
-  T <-->|poll task queue| K[worker: Workflow + Activities]
+%%{init: {"theme": "base", "flowchart": {"nodeSpacing": 40, "rankSpacing": 60, "padding": 18}, "themeVariables": {
+  "fontSize": "15px",
+  "primaryColor": "#141414",
+  "primaryTextColor": "#f8fafc",
+  "primaryBorderColor": "#444ce7",
+  "lineColor": "#1ff1a5",
+  "textColor": "#f8fafc",
+  "clusterBkg": "#1a1830",
+  "clusterBorder": "#465a78",
+  "titleColor": "#cacbf9",
+  "edgeLabelBackground": "#141414"
+}}}%%
+flowchart TB
+  subgraph card[" "]
+    direction TB
+    subgraph people["PEOPLE"]
+      direction LR
+      employee["Employee"]
+      approver["Approver"]
+    end
+
+    web["web<br/>UI + API"]
+    temporal[("Temporal<br/>task queue: expense-approval")]
+    worker["worker<br/>ExpenseApproval Workflow<br/>+ Activities"]
+  end
+
+  employee -- "① submit" --> web
+  web -- "② start Workflow" --> temporal
+  worker -- "③ poll and run steps" --> temporal
+  approver -- "④ approve / reject" --> web
+  web -- "⑤ decision Signal" --> temporal
+  web -. "reads Event History" .-> temporal
+
+  classDef card fill:#141414,stroke:#141414,color:#141414
+  classDef people fill:#141414,stroke:#7f86f1,stroke-width:1px,stroke-dasharray:4 3,color:#cacbf9
+  classDef app fill:#141414,stroke:#b664ff,stroke-width:2px,color:#f8fafc
+  classDef temporal fill:#141414,stroke:#444ce7,stroke-width:2px,color:#f8fafc
+  classDef worker fill:#141414,stroke:#4fd8ff,stroke-width:2px,color:#f8fafc
+  class card card
+  class employee,approver people
+  class web app
+  class temporal temporal
+  class worker worker
 ```
+
+1. The employee submits an expense in the web app.
+2. The web app starts an `ExpenseApproval` Workflow on the task queue.
+3. The worker polls that task queue and runs each step. If it stops, Temporal keeps the Workflow's state until a worker returns.
+4. The approver approves or rejects in the web app.
+5. The web app sends the decision as a Signal, which Temporal records even with no worker running. The UI reads Event History, so it never needs a worker to show progress.
 
 | Component | What it does |
 |---|---|
