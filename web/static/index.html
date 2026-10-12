@@ -1,0 +1,137 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Expense Approvals · Temporal</title>
+  <meta name="description" content="Submit an expense, approve it, crash the worker. Temporal keeps the request, the timer, and the decision.">
+  <meta name="theme-color" content="#141414">
+  <link rel="icon" href="assets/brand/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/css/temporal-theme.css">
+  <link rel="stylesheet" href="app.css">
+</head>
+<body>
+  <canvas id="stars" aria-hidden="true"></canvas>
+  <div class="blur-container" aria-hidden="true"><div class="blur-pink"></div><div class="blur-green"></div></div>
+
+  <div class="app">
+    <header class="topbar">
+      <div class="brand">
+        <img src="assets/brand/temporal-logo.svg" alt="Temporal" width="172" height="44">
+        <span class="brand-divider" aria-hidden="true"></span>
+        <span class="eyebrow">Expense approvals</span>
+      </div>
+      <div class="topbar-actions">
+        <span class="mono muted queue" id="queue" title="Task queue for this deployment"></span>
+        <button class="button secondary ultraviolet small" id="reset" type="button" title="Start a fresh, empty session in this browser">New session</button>
+        <a class="button secondary ultraviolet small" id="temporal-ui" href="#" target="_blank" rel="noopener">Temporal UI ↗</a>
+      </div>
+    </header>
+
+    <section class="hero">
+      <p class="eyebrow">Temporal · Signals · Durable timers · Retries</p>
+      <h1 class="display">Approvals that wait <span class="text-gradient-ultraviolet">as long as they need to.</span></h1>
+      <p class="lede">Submit an expense, approve it, or let it escalate. Stop the worker at any point: the request, its timer, and the decision are kept by Temporal.</p>
+    </section>
+
+    <main class="grid">
+      <!-- Employee -->
+      <section class="column employee">
+        <div class="card form-card">
+          <div class="card-head">
+            <h2 class="heading">New expense</h2>
+            <span class="badge idle" id="employee-name">Employee</span>
+          </div>
+          <div class="presets" role="group" aria-label="Example expenses">
+            <button type="button" class="chip" data-desc="Team lunch" data-cat="Meals" data-amount="38.50" data-fail="0">Team lunch · $38.50</button>
+            <button type="button" class="chip" data-desc="Conference ticket" data-cat="Travel" data-amount="649" data-fail="0">Conference · $649</button>
+            <button type="button" class="chip" data-desc="Client dinner" data-cat="Meals" data-amount="412" data-fail="3">Client dinner · payment outage</button>
+            <button type="button" class="chip" data-desc="New laptop" data-cat="Equipment" data-amount="7200" data-fail="0">Laptop · $7,200</button>
+          </div>
+          <form id="expense-form" autocomplete="off">
+            <label class="field wide"><span>Description</span>
+              <input name="description" required maxlength="80" placeholder="What was it for?">
+            </label>
+            <label class="field"><span>Category</span>
+              <select name="category">
+                <option>Travel</option><option>Meals</option><option>Equipment</option><option>Software</option><option>Other</option>
+              </select>
+            </label>
+            <label class="field"><span>Amount (USD)</span>
+              <input name="amount" required inputmode="decimal" pattern="[0-9]+(\.[0-9]{1,2})?" placeholder="0.00">
+            </label>
+            <label class="field wide demo-field"><span>Demo · payment provider fails the first</span>
+              <select name="paymentFailures">
+                <option value="0">0 attempts (healthy)</option><option value="1">1 attempt</option><option value="2">2 attempts</option><option value="3">3 attempts</option>
+              </select>
+            </label>
+            <button class="button primary ultraviolet wide" type="submit" id="submit">Submit expense</button>
+          </form>
+        </div>
+
+        <div class="card list-card">
+          <div class="card-head">
+            <h2 class="heading">My requests</h2>
+            <span class="muted" id="list-status"></span>
+          </div>
+          <ul class="requests" id="requests"></ul>
+          <p class="empty muted" id="requests-empty">Nothing submitted in this session yet.</p>
+        </div>
+      </section>
+
+      <!-- Journey (the hero panel) -->
+      <section class="card journey" id="journey" aria-live="polite">
+        <div class="journey-empty" id="journey-empty">
+          <img src="assets/brand/ziggy-face.png" alt="" width="374" height="400">
+          <p>Submit an expense to watch Temporal run the approval.</p>
+          <p class="muted">Each step comes straight from the workflow's Event History.</p>
+        </div>
+        <div class="journey-body" id="journey-body" hidden>
+          <div class="card-head">
+            <div>
+              <p class="eyebrow">Request journey</p>
+              <h2 class="journey-title" id="j-title"></h2>
+              <p class="muted" id="j-meta"></p>
+            </div>
+            <span class="status-pill" id="j-status"></span>
+          </div>
+          <div class="worker-banner" id="j-worker" hidden>
+            <strong>No worker is running this step.</strong>
+            <span id="j-worker-text"></span>
+          </div>
+          <ol class="steps" id="j-steps"></ol>
+          <div class="journey-foot">
+            <span class="mono muted wfid" id="j-wfid"></span>
+            <a class="button secondary green small" id="j-link" target="_blank" rel="noopener">Open execution ↗</a>
+          </div>
+        </div>
+      </section>
+
+      <!-- Approver + code -->
+      <section class="column side">
+        <div class="card inbox-card">
+          <div class="card-head">
+            <h2 class="heading">Approver inbox</h2>
+            <span class="badge idle" id="approver-name">Approver</span>
+          </div>
+          <ul class="inbox" id="inbox"></ul>
+          <p class="empty muted" id="inbox-empty">No requests waiting for a decision.</p>
+        </div>
+
+        <div class="card code-card">
+          <div class="card-head">
+            <h2 class="heading">Workflow code</h2>
+            <span class="mono muted">expense/workflow.go</span>
+          </div>
+          <pre class="code" id="code" tabindex="0" aria-label="ExpenseApproval workflow source"></pre>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" hidden></div>
+
+  <script src="assets/js/starfield.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

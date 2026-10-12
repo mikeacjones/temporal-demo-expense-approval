@@ -1,0 +1,72 @@
+# Draft DemoProject for tmprl-demo.cloud. Onboarding is one PR that adds this
+# file to temporal-sa/tmprl-demo-cloud-registry as projects/demo/expense-approval.yaml.
+# Flux applies it and the registry operator derives everything else: the
+# Kubernetes namespace, the Temporal Cloud namespace and API key, image builds,
+# Services, TLS ingress, and the crashable-workspace wiring.
+#
+# Validate from the registry repo before opening the PR:
+#   python3 scripts/validate_projects.py /path/to/deploy/expense-approval.yaml
+apiVersion: registry.tmprl-demo.cloud/v1alpha1
+kind: DemoProject
+metadata:
+  name: expense-approval # project identity; everything else is derived from it
+spec:
+  registry:
+    title: Expense Approval
+    summary: >-
+      Submit an expense, approve it, or let it escalate. Stop the worker at any
+      point: the request, its durable timer, and the decision are kept by
+      Temporal, and the reimbursement retries through a payment outage.
+    tags: [Human-in-the-Loop, Signals, Durable Timers, Retries]
+    temporalSdks: [Go]
+    links:
+      runbook:
+        label: README (Demo script)
+        url: https://github.com/temporal-sa/temporal-demo-expense-approval#demo-script
+    # Every worker and client reads TEMPORAL_TASK_QUEUE (default
+    # expense-approval) and includes it in Workflow IDs, so a crashable clone
+    # gets its own queue and its own set of executions in the shared namespace.
+    crashable:
+      enabled: true
+      taskQueueEnv: TEMPORAL_TASK_QUEUE
+      baseTaskQueue: expense-approval
+
+  source:
+    repo: https://github.com/temporal-sa/temporal-demo-expense-approval
+    # branch defaults to main
+
+  temporal:
+    auth:
+      mode: apiKey
+
+  builds:
+    app:
+      context: .
+      dockerfile: Dockerfile
+
+  components:
+    # UI + API. Starts, signals, and reads Workflows, so it needs Temporal
+    # access but is not a worker; it stays up when workers are crashed.
+    web:
+      build: app
+      temporalAccess: true
+      ports:
+        - name: http
+          containerPort: 8080
+          servicePort: 80 # servicePort 80 => the public catch-all route
+    # The Temporal worker. The platform injects TEMPORAL_ADDRESS,
+    # TEMPORAL_NAMESPACE, TEMPORAL_API_KEY, and TEMPORAL_TLS.
+    worker:
+      build: app
+      worker: true
+      command: ["/app/worker"]
+
+  ingress:
+    subdomain: expense-approval
+    # temporalAuthRequired defaults to true: Temporal SSO in front of the demo.
+
+  # /healthz calls Temporal's GetSystemInfo, so a 200 proves the web component
+  # is wired to its Temporal Cloud namespace without starting any work.
+  smokeCheck:
+    path: /healthz
+    expectedStatus: 200
