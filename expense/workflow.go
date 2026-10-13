@@ -69,7 +69,7 @@ func ExpenseApproval(ctx workflow.Context, req ExpenseRequest) (ExpenseResult, e
 		}
 
 		decided := func() bool { return status.Decision != nil }
-		ok, err := workflow.AwaitWithTimeout(ctx, req.EscalateAfter, decided)
+		ok, err := awaitDecision(ctx, req.EscalateAfter, decided)
 		if err != nil {
 			return ExpenseResult{}, err
 		}
@@ -79,7 +79,7 @@ func ExpenseApproval(ctx workflow.Context, req ExpenseRequest) (ExpenseResult, e
 			if err := workflow.ExecuteActivity(ctx, a.NotifyApprover, notice).Get(ctx, nil); err != nil {
 				return ExpenseResult{}, err
 			}
-			ok, err = workflow.AwaitWithTimeout(ctx, req.ExpireAfter-req.EscalateAfter, decided)
+			ok, err = awaitDecision(ctx, req.ExpireAfter-req.EscalateAfter, decided)
 			if err != nil {
 				return ExpenseResult{}, err
 			}
@@ -112,4 +112,18 @@ func ExpenseApproval(ctx workflow.Context, req ExpenseRequest) (ExpenseResult, e
 	status.Stage = StageDone
 	logger.Info("expense request finished", "outcome", result.Outcome)
 	return result, nil
+}
+
+// awaitDecision waits until a decision is recorded or the timeout passes, and
+// reports whether a decision arrived. The timer runs on its own cancelable
+// context, so when the decision wins the timer is canceled and the Event
+// History records it, instead of leaving a timer that fires for nothing.
+func awaitDecision(ctx workflow.Context, timeout time.Duration, decided func() bool) (bool, error) {
+	timerCtx, cancelTimer := workflow.WithCancel(ctx)
+	defer cancelTimer()
+	timer := workflow.NewTimer(timerCtx, timeout)
+	if err := workflow.Await(ctx, func() bool { return decided() || timer.IsReady() }); err != nil {
+		return false, err
+	}
+	return decided(), nil
 }

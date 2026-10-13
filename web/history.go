@@ -81,9 +81,10 @@ func buildExpense(id string, events []*historypb.HistoryEvent, desc *workflowser
 	// completed workflow task: a Signal, a fired timer, a finished Activity.
 	var unprocessedSince *time.Time
 
-	// The Go SDK doesn't cancel AwaitWithTimeout's timer when the condition is
-	// met; the timer just stops mattering. A wait ends once the Workflow has
-	// processed the decision Signal.
+	// A wait ends once the Workflow has processed the decision Signal. The
+	// Workflow cancels the timer in that same task, so TimerCanceled follows
+	// and refines the detail; this also closes waits whose timer was never
+	// canceled, such as executions started on earlier code.
 	closeWaits := func(at time.Time) {
 		for _, i := range timerSteps {
 			if s := &e.Steps[i]; s.State == "waiting" {

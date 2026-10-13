@@ -4,7 +4,7 @@ An expense approval app whose approvals wait as long as they need to, even when 
 
 - A **Workflow** checks policy, notifies an approver, waits for a decision, escalates, pays, and notifies the employee.
 - The approver's decision arrives as a **[Signal](https://docs.temporal.io/develop/go/message-passing#signals)**, which Temporal records even while no worker is running.
-- Escalation and expiry are **[durable timers](https://docs.temporal.io/develop/go/timers)** (`workflow.AwaitWithTimeout`), visible as live countdowns.
+- Escalation and expiry are **[durable timers](https://docs.temporal.io/develop/go/timers)** (`workflow.NewTimer`), visible as live countdowns. When a decision wins, the Workflow cancels the timer.
 - A flaky payment provider is handled by a **[Retry Policy](https://docs.temporal.io/encyclopedia/retry-policies)**, not a retry loop.
 - Every screen is built from the Workflow's **Event History**, so the app keeps working while workers are down.
 
@@ -86,7 +86,7 @@ The first valid decision wins. Duplicates, late replies, and replies from someon
 | Beat | Do | Point out |
 |---|---|---|
 | 1. Happy path | Click **Team lunch** → **Submit** | Auto-approved by policy and paid in a few seconds. Each step in the journey comes from Event History. |
-| 2. Durable wait | Click **Conference** → **Submit** | It's now waiting for Sam Chen. The countdown is a durable timer, and the code panel highlights `AwaitWithTimeout`. |
+| 2. Durable wait | Click **Conference** → **Submit** | It's now waiting for Sam Chen. The countdown is a durable timer, and the code panel highlights `awaitDecision`. |
 | 3. Crash | Stop the worker (`Ctrl-C` on `make worker`, or the catalog's crash control) | The app keeps working. |
 | 4. Decide anyway | **Approve** in the Approver inbox | "Decision recorded", then "No worker is running this step". The Signal is safe in Temporal. |
 | 5. Recover | Start the worker again | The Workflow picks up the decision, pays, and finishes. **Open execution ↗** shows the Signal in the Event History. |

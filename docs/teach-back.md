@@ -26,7 +26,7 @@ Customers will open `expense/workflow.go`, so it reads top to bottom as the busi
 
 | Need | Native feature used |
 |---|---|
-| Wait for a person, escalate, expire | `workflow.AwaitWithTimeout` (durable timers) |
+| Wait for a person, escalate, expire | `workflow.NewTimer` on a cancelable context, canceled when a decision wins (durable timers) |
 | Deliver the decision | A structured Signal (who, approved, comment, when) with first-valid-decision-wins |
 | Survive a payment outage | Retry Policy with backoff; Workflow ID as the idempotency key |
 | Report progress | A `status` Query, plus Event History for the UI |
@@ -80,5 +80,5 @@ What a **crashable workspace** does: it clones the demo into its own namespace a
 - **Signals vs Updates when workers can vanish:** a Signal is accepted with no worker running. An Update needs a worker to accept it, so the approver's click would hang during a crash.
 - **Build the UI from history, not Queries:** a Query also needs a worker. Event History and `DescribeWorkflowExecution` are served by Temporal alone.
 - **Sticky queues:** after a worker dies, its next workflow task waits about 5 seconds on the dead worker's sticky queue before it's rescheduled. Measure "waiting for a worker" from the first unprocessed event, not the task's scheduled time.
-- **`AwaitWithTimeout` doesn't record `TimerCanceled`** in the Go SDK when the condition wins. The timer simply goes unused, so a UI shouldn't wait for that event.
+- **Cancel the timer yourself:** in the current Go SDK, `workflow.AwaitWithTimeout` doesn't cancel its timer when the condition wins. `awaitDecision` starts the timer on a `workflow.WithCancel` context and cancels it when the decision arrives, so the Event History records `TimerCanceled` in the same workflow task that processed the decision.
 - **`ENTRYPOINT` vs `command`:** with `ENTRYPOINT ["/app/web"]`, `docker run image /app/worker` silently runs the web app again. Use `CMD`, so Docker and the registry's `command:` both select the process.
