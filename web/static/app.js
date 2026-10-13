@@ -181,9 +181,10 @@
         list.append(li);
       }
       li.dataset.state = s.state;
-      li.querySelector(".dot").textContent = s.state === "done" ? "✓" : s.state === "failed" ? "!" : "";
+      li.querySelector(".dot").textContent = { done: "✓", recovered: "↺", failed: "!" }[s.state] || "";
       li.querySelector(".step-label").textContent = s.label + (s.attempt > 1 && s.state !== "done" ? ` · attempt ${s.attempt}` : "");
-      li.querySelector(".step-time").textContent = clock(s.at);
+      // Waits and worker gaps span other steps, so show when they started and ended.
+      li.querySelector(".step-time").textContent = clock(s.at) + (s.endedAt ? `\nto ${clock(s.endedAt)}` : "");
       li.querySelector(".step-detail").textContent = s.detail || "";
       const cd = li.querySelector(".step-countdown");
       cd.dataset.until = s.until || "";
@@ -197,14 +198,16 @@
   // ---------- code panel ----------
   function renderSource(src) {
     const lines = src.replace(/\n$/, "").split("\n");
-    const token = /("(?:[^"\\]|\\.)*")|(\/\/.*$)|\b(func|return|if|else|for|switch|case|default|var|package|import|continue|nil|true|false|go)\b/g;
+    // Same token palette as the slide deck: keywords, function names, strings,
+    // constants and types, and comments each get their own color.
+    const token = /("(?:[^"\\]|\\.)*")|(\/\/.*$)|\b(func|return|if|else|for|range|switch|case|default|var|const|type|struct|package|import|continue|break|defer|go)\b|\b(nil|true|false|bool|string|error|int|int32|int64|float64|any)\b|\b(\d+(?:\.\d+)?)\b|\b([A-Za-z_]\w*)(?=\()/g;
     const esc = (s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
     const html = lines.map((line) => {
       let out = "", last = 0, m;
       token.lastIndex = 0;
       while ((m = token.exec(line))) {
         out += esc(line.slice(last, m.index));
-        const cls = m[1] ? "s" : m[2] ? "c" : "k";
+        const cls = m[1] ? "s" : m[2] ? "c" : m[3] ? "k" : m[6] ? "f" : "t";
         out += `<span class="${cls}">${esc(m[0])}</span>`;
         last = token.lastIndex;
       }
@@ -223,9 +226,9 @@
       submit: [find("func ExpenseApproval")],
       policy: [find("a.CheckPolicy")],
       "notify-approver": [find("a.NotifyApprover", 1)],
-      wait: [find("AwaitWithTimeout", 1)],
+      wait: [find("awaitDecision(ctx, req.EscalateAfter")],
       escalate: [find("a.NotifyApprover", 2)],
-      "wait-escalated": [find("AwaitWithTimeout", 2)],
+      "wait-escalated": [find("awaitDecision(ctx, req.ExpireAfter")],
       decision: [find("decisions.Receive"), find("status.Decision = &d")],
       pay: [find("a.PayReimbursement")],
       "pay-retry": [find("a.PayReimbursement"), ...retry],
@@ -239,7 +242,7 @@
   function highlightCode(e) {
     const steps = e.steps || [];
     if (!steps.length || !Object.keys(state.anchors).length) return;
-    const open = steps.filter((s) => s.state !== "done");
+    const open = steps.filter((s) => s.state !== "done" && s.state !== "recovered");
     let cur = open.length ? open[open.length - 1] : steps[steps.length - 1];
     if (cur.key.startsWith("wait") && steps[steps.length - 1].key === "decision") cur = steps[steps.length - 1];
     const key = cur.key === "pay" && cur.state === "retrying" ? "pay-retry" : cur.key;

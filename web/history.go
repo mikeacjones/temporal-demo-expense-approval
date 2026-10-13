@@ -22,9 +22,10 @@ type Step struct {
 	Key     string     `json:"key"` // matches a code anchor in the UI
 	Label   string     `json:"label"`
 	Detail  string     `json:"detail,omitempty"`
-	State   string     `json:"state"` // active | waiting | retrying | done | failed
+	State   string     `json:"state"` // active | waiting | retrying | done | recovered | failed
 	At      time.Time  `json:"at"`
-	Until   *time.Time `json:"until,omitempty"` // timer deadline, for a countdown
+	EndedAt *time.Time `json:"endedAt,omitempty"` // for steps that span others: waits and worker gaps
+	Until   *time.Time `json:"until,omitempty"`   // timer deadline, for a countdown
 	Attempt int32      `json:"attempt,omitempty"`
 }
 
@@ -81,13 +82,29 @@ func buildExpense(id string, events []*historypb.HistoryEvent, desc *workflowser
 	// completed workflow task: a Signal, a fired timer, a finished Activity.
 	var unprocessedSince *time.Time
 
-	// The Go SDK doesn't cancel AwaitWithTimeout's timer when the condition is
-	// met; the timer just stops mattering. A wait ends once the Workflow has
-	// processed the decision Signal.
+	// A worker gap is ready work that no worker started for a while: the
+	// worker was stopped or crashed. It stays in the journey after recovery,
+	// so the outage and what survived it remain visible.
+	var gapFrom, gapTo *time.Time
+	addGap := func(from, to time.Time) {
+		t := to
+		held := "the request and its timers"
+		if e.DecisionRecorded != nil {
+			held = "the request, its timers, and the decision"
+		}
+		e.Steps = append(e.Steps, Step{Key: "worker-gap", Label: "No worker for " + formatGap(to.Sub(from)),
+			Detail: "Temporal held " + held + " until a worker returned. Nothing was lost.",
+			State:  "recovered", At: from, EndedAt: &t})
+	}
+
+	// A wait ends once the Workflow has processed the decision Signal. The
+	// Workflow cancels the timer in that same task, so TimerCanceled follows
+	// and refines the detail; this also closes waits whose timer was never
+	// canceled, such as executions started on earlier code.
 	closeWaits := func(at time.Time) {
 		for _, i := range timerSteps {
 			if s := &e.Steps[i]; s.State == "waiting" {
-				s.State, s.At, s.Until, s.Detail = "done", at, nil, "Decision arrived before the deadline"
+				s.State, s.EndedAt, s.Until, s.Detail = "done", &at, nil, "Decision arrived before the deadline"
 			}
 		}
 	}
@@ -95,7 +112,18 @@ func buildExpense(id string, events []*historypb.HistoryEvent, desc *workflowser
 	for _, ev := range events {
 		at := ev.GetEventTime().AsTime()
 		switch ev.GetEventType() {
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_STARTED:
+			// A task can start more than once if a worker dies holding it, so the
+			// gap runs to the start of the attempt that completes.
+			if unprocessedSince != nil && at.Sub(*unprocessedSince) > workerGrace {
+				from, to := *unprocessedSince, at
+				gapFrom, gapTo = &from, &to
+			}
 		case enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED:
+			if gapFrom != nil {
+				addGap(*gapFrom, *gapTo)
+				gapFrom, gapTo = nil, nil
+			}
 			unprocessedSince = nil
 			if e.DecisionRecorded != nil {
 				closeWaits(at)
@@ -138,6 +166,11 @@ func buildExpense(id string, events []*historypb.HistoryEvent, desc *workflowser
 			attrs := ev.GetActivityTaskStartedEventAttributes()
 			if i, ok := activitySteps[attrs.GetScheduledEventId()]; ok {
 				e.Steps[i].Attempt = attrs.GetAttempt()
+				// Later attempts include retry backoff, so only the first one says
+				// how long the Activity waited for a worker.
+				if scheduled := e.Steps[i].At; attrs.GetAttempt() == 1 && at.Sub(scheduled) > workerGrace {
+					addGap(scheduled, at)
+				}
 			}
 
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
@@ -180,7 +213,7 @@ func buildExpense(id string, events []*historypb.HistoryEvent, desc *workflowser
 			}
 			if i, ok := timerSteps[ev.GetTimerFiredEventAttributes().GetTimerId()]; ok {
 				s := &e.Steps[i]
-				s.State, s.At, s.Until = "done", at, nil
+				s.State, s.EndedAt, s.Until = "done", &at, nil
 				s.Detail = "No decision in time"
 			}
 			waitOver = timersStarted > 1
@@ -188,7 +221,7 @@ func buildExpense(id string, events []*historypb.HistoryEvent, desc *workflowser
 		case enumspb.EVENT_TYPE_TIMER_CANCELED:
 			if i, ok := timerSteps[ev.GetTimerCanceledEventAttributes().GetTimerId()]; ok {
 				s := &e.Steps[i]
-				s.State, s.At, s.Until = "done", at, nil
+				s.State, s.EndedAt, s.Until = "done", &at, nil
 				s.Detail = "Decision arrived; timer canceled"
 			}
 			waitOver = true
@@ -397,4 +430,10 @@ func hasWaiting(e *Expense) bool {
 		}
 	}
 	return false
+}
+
+// formatGap renders a worker gap as m:ss, matching the UI's countdowns.
+func formatGap(d time.Duration) string {
+	sec := int(d.Round(time.Second) / time.Second)
+	return fmt.Sprintf("%d:%02d", sec/60, sec%60)
 }
