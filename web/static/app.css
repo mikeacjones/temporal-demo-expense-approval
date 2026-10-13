@@ -2,6 +2,10 @@
    presentations; a normal scrolling page on narrow screens. */
 [hidden] { display: none !important; }
 
+/* Edge for inputs and chips. The theme's --border (1.4:1) is for decorative
+   card edges only; controls need 3:1 against their background. */
+:root { --control-edge: #63789c; }
+
 html { font-size: clamp(10px, min(0.9vw, 1.55vh), 26px); }
 html, body { height: 100%; }
 body { overflow: hidden; }
@@ -39,16 +43,17 @@ body { overflow: hidden; }
 .presets { display: flex; flex-wrap: wrap; gap: .4rem; }
 .chip {
   font: 500 .72rem var(--font-mono); color: var(--indigo-100); background: transparent;
-  border: 1px solid var(--border); padding: .3rem .55rem; cursor: pointer;
+  border: 1px solid var(--control-edge); padding: .3rem .55rem; cursor: pointer;
 }
-.chip:hover, .chip:focus-visible { border-color: var(--uv-light); color: var(--off-white); outline: none; }
+.chip:hover { border-color: var(--uv-light); color: var(--off-white); }
+.chip:focus-visible { outline: none; border-color: var(--green); color: var(--off-white); box-shadow: 0 0 0 3px var(--green-soft); }
 #expense-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: .6rem; }
 .field { display: grid; gap: .25rem; min-width: 0; }
 .field span { font: 500 .66rem var(--font-mono); text-transform: uppercase; letter-spacing: .05em; color: var(--slate-300); }
 .wide { grid-column: 1 / -1; }
 input, select {
   width: 100%; min-width: 0; font: 400 .95rem var(--font-sans); color: var(--off-white);
-  background: rgba(255, 255, 255, .04); border: 1px solid var(--border); padding: .5rem .6rem; border-radius: 0;
+  background: rgba(255, 255, 255, .04); border: 1px solid var(--control-edge); padding: .5rem .6rem; border-radius: 0;
 }
 input:focus, select:focus { outline: none; border-color: var(--green); }
 select option { background: var(--space-black); }
@@ -63,6 +68,7 @@ select option { background: var(--space-black); }
   padding: .5rem .6rem; border: 1px solid transparent; cursor: pointer; background: rgba(255, 255, 255, .02);
 }
 .request:hover { border-color: var(--border); }
+.request:focus-visible { outline: none; border-color: var(--green); box-shadow: 0 0 0 3px var(--green-soft); }
 .request[aria-current="true"] { border-color: var(--uv-light); background: rgba(68, 76, 231, .12); }
 .request .desc { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .request .amount { font-variant-numeric: tabular-nums; text-align: right; }
@@ -100,16 +106,17 @@ select option { background: var(--space-black); }
   font: 600 .7rem var(--font-mono); color: var(--space-black); background: var(--space-black); z-index: 1;
 }
 .step[data-state="done"] .dot { border-color: var(--green); background: var(--green); }
-.step[data-state="active"] .dot { border-color: var(--cyan); animation: pulse 1.4s ease-in-out infinite; }
-.step[data-state="waiting"] .dot { border-color: var(--yellow); animation: pulse 2.4s ease-in-out infinite; }
-.step[data-state="retrying"] .dot { border-color: var(--pink); animation: pulse 1s ease-in-out infinite; }
+/* Cyan is running now; yellow is in progress but held (waiting, retrying). */
+.step[data-state="active"] .dot { --pulse: rgba(79, 216, 255, .18); border-color: var(--cyan); animation: pulse 1.4s ease-in-out infinite; }
+.step[data-state="waiting"] .dot { --pulse: rgba(254, 203, 47, .18); border-color: var(--yellow); animation: pulse 2.4s ease-in-out infinite; }
+.step[data-state="retrying"] .dot { --pulse: rgba(254, 203, 47, .18); border-color: var(--yellow); animation: pulse 1s ease-in-out infinite; }
+.step[data-state="recovered"] .dot { border-color: var(--yellow); color: var(--yellow); font-size: .85rem; }
 .step[data-state="failed"] .dot { border-color: var(--red); background: var(--red); }
-@keyframes pulse { 50% { box-shadow: 0 0 0 .35rem rgba(79, 216, 255, .15); } }
+@keyframes pulse { 50% { box-shadow: 0 0 0 .35rem var(--pulse); } }
 .step-label { font-size: 1.05rem; }
-.step-time { font: 500 .7rem var(--font-mono); color: var(--slate-300); white-space: nowrap; }
-.step-detail { grid-column: 2 / -1; color: var(--slate-300); font-size: .85rem; }
-.step-countdown { grid-column: 2 / -1; font: 500 .8rem var(--font-mono); color: var(--yellow); }
-.step[data-state="retrying"] .step-countdown { color: var(--pink); }
+.step-time { grid-column: 3; grid-row: 1 / span 2; font: 500 .7rem var(--font-mono); color: var(--slate-300); white-space: pre; text-align: right; }
+.step-detail { grid-column: 2; color: var(--slate-300); font-size: .85rem; }
+.step-countdown { grid-column: 2; font: 500 .8rem var(--font-mono); color: var(--yellow); }
 .step.enter { animation: step-in .35s ease-out; }
 @keyframes step-in { from { opacity: 0; transform: translateY(.4rem); } }
 
@@ -131,24 +138,41 @@ select option { background: var(--space-black); }
 .code-card { min-height: 0; overflow: hidden; }
 .code {
   margin: 0; flex: 1; min-height: 0; overflow: auto; font: 400 .72rem/1.55 var(--font-mono);
-  color: var(--indigo-100); background: rgba(0, 0, 0, .35); padding: .5rem 0; counter-reset: line;
+  color: #f8f8f2; background: rgba(0, 0, 0, .35); padding: .5rem 0; counter-reset: line;
   position: relative; tab-size: 2; -moz-tab-size: 2;
 }
 .code .ln { display: block; padding: 0 .8rem 0 0; white-space: pre; border-left: 3px solid transparent; }
 .code .ln::before { counter-increment: line; content: counter(line); display: inline-block; width: 2.2rem; padding-right: .8rem; text-align: right; color: var(--slate-500); }
 .code .ln.hl { background: rgba(31, 241, 165, .12); border-left-color: var(--green); color: var(--off-white); }
-.code .ln.hl.retry { background: rgba(255, 107, 255, .12); border-left-color: var(--pink); }
-.code .ln.hl.wait { background: rgba(254, 203, 47, .1); border-left-color: var(--yellow); }
-.code .c { color: var(--slate-300); font-style: italic; }
-.code .k { color: var(--purple); }
-.code .s { color: var(--lime); }
+.code .ln.hl.retry, .code .ln.hl.wait { background: rgba(254, 203, 47, .1); border-left-color: var(--yellow); }
+/* The slide deck's code palette, so the panel and slide 9 read the same. */
+.code .c { color: #8a8fa8; }
+.code .k { color: var(--indigo-300); }
+.code .f { color: var(--cyan); }
+.code .s { color: var(--green); }
+.code .t { color: var(--yellow); }
 
 /* ---------- Toast ---------- */
+/* Top right, beside the short hero text, so it never covers the journey or its footer. */
 .toast {
-  position: fixed; left: 50%; bottom: 1.4rem; transform: translateX(-50%); z-index: 10;
+  position: fixed; top: 4.2rem; right: 1.5rem; max-width: min(28rem, calc(100vw - 32px)); z-index: 10;
   background: var(--space-black); border: 1px solid var(--uv-light); padding: .6rem 1rem; font-size: .9rem;
 }
 .toast.error { border-color: var(--red); }
+
+/* ---------- Tall or narrow windows (half a screen beside a terminal) ----------
+   Employee and journey side by side; inbox and code share the bottom row, so
+   the code panel keeps enough width to read. */
+@media (min-width: 901px) and (max-aspect-ratio: 5/4) {
+  html { font-size: clamp(10px, min(1.45vw, 1.15vh), 26px); }
+  .grid {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr);
+    grid-template-rows: minmax(0, 1.1fr) minmax(0, 1fr);
+  }
+  .employee { grid-column: 1; grid-row: 1; }
+  .journey { grid-column: 2; grid-row: 1; }
+  .side { grid-column: 1 / -1; grid-row: 2; grid-template-rows: minmax(0, 1fr); grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr); }
+}
 
 /* ---------- Narrow screens: scrolling, stacked ---------- */
 @media (max-width: 900px) {
@@ -165,4 +189,9 @@ select option { background: var(--space-black); }
   .code-card { height: 26rem; }
   .inbox { max-height: none; }
   .brand-divider, .brand .eyebrow { display: none; }
+  .toast { top: .8rem; right: 16px; }
+  .journey .card-head { flex-wrap: wrap; }
+  /* Phone tap targets: at least 44px. */
+  .chip, .button.small, input, select { min-height: 44px; }
+  .chip { padding: .5rem .75rem; }
 }

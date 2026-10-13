@@ -89,7 +89,7 @@ The first valid decision wins. Duplicates, late replies, and replies from someon
 | 2. Durable wait | Click **Conference** → **Submit** | It's now waiting for Sam Chen. The countdown is a durable timer, and the code panel highlights `awaitDecision`. |
 | 3. Crash | Stop the worker (`Ctrl-C` on `make worker`, or the catalog's crash control) | The app keeps working. |
 | 4. Decide anyway | **Approve** in the Approver inbox | "Decision recorded", then "No worker is running this step". The Signal is safe in Temporal. |
-| 5. Recover | Start the worker again | The Workflow picks up the decision, pays, and finishes. **Open execution ↗** shows the Signal in the Event History. |
+| 5. Recover | Start the worker again | The Workflow picks up the decision, pays, and finishes. The journey keeps a "No worker for m:ss" step as proof of the outage, and **Open execution ↗** shows the Signal and the canceled timer in the Event History. |
 | 6. Escalation | Submit an expense and don't decide | After `ESCALATE_AFTER` it escalates to Dana Ortiz, who can now approve it. |
 | 7. Retries | Click **Client dinner · payment outage** → Submit → Approve | Payment fails three times, and Temporal retries with backoff until it succeeds. |
 | 8. Policy | Click **Laptop · $7,200** | Refused by policy without a person in the loop. |
